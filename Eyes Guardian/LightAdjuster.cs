@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Device.Location;
 using System.Diagnostics;
@@ -15,21 +16,22 @@ namespace Eyes_Guardian
 		private int lightMode = -1;
 		private int brightness = -1;
         private readonly GeoCoordinate location;
-
-		public GeoCoordinateWatcher geoCoordinateWatcher = new GeoCoordinateWatcher();
+        private readonly Mutex mutex = new Mutex();
 
 		public LightAdjuster()
 		{
+            GeoCoordinateWatcher geoCoordinateWatcher = new GeoCoordinateWatcher();
 			geoCoordinateWatcher.TryStart(true, TimeSpan.FromSeconds(10));
             location = geoCoordinateWatcher.Position.Location;
             geoCoordinateWatcher.Stop();
+            geoCoordinateWatcher.Dispose();
             if (location.IsUnknown)
             {
                 location = new GeoCoordinate(52.0, 17.5);
             }
         }
 
-		public int LightMode
+		private int LightMode
 		{
 			get => lightMode;
 			set
@@ -42,7 +44,7 @@ namespace Eyes_Guardian
 			}
 		}
 
-		public int Brightness
+        private int Brightness
 		{
 			get => brightness;
 			set
@@ -54,8 +56,8 @@ namespace Eyes_Guardian
 				}
 			}
 		}
-		
-		public void RunCommand(string command)
+
+        private void RunCommand(string command)
 		{
 			Process process = new Process
 			{
@@ -71,8 +73,16 @@ namespace Eyes_Guardian
             process.Dispose();
 		}
 
-		public void Adjust()
+		public void Adjust(bool force)
 		{
+            mutex.WaitOne();
+
+            if (force)
+            {
+                lightMode = -1;
+                brightness = -1;
+            }
+
 			Celestial celestial = Celestial.CalculateCelestialTimes
 				(location.Latitude, location.Longitude, DateTime.UtcNow);
 
@@ -94,6 +104,8 @@ namespace Eyes_Guardian
 			{
 				Brightness = 0;
 			}
+
+            mutex.ReleaseMutex();
 		}
 	}
 }

@@ -22,7 +22,7 @@ namespace Eyes_Guardian
         {
             while (working)
             {
-                adjuster.Adjust();
+                adjuster.Adjust(false);
                 Thread.Sleep(sleepingPeriod);
             }
         }
@@ -43,6 +43,11 @@ namespace Eyes_Guardian
         {
             working = false;
             Application.Exit();
+        }
+
+        private void AdjustBrightnessNowToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            adjuster.Adjust(true);
         }
     }
 }
