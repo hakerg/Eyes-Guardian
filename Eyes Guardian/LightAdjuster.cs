@@ -8,12 +8,19 @@ using System.Device.Location;
 using System.Diagnostics;
 using static System.Math;
 using CoordinateSharp;
+using Microsoft.Win32;
+using System.Runtime.InteropServices;
 
 namespace Eyes_Guardian
 {
 	class LightAdjuster
 	{
-		private int lightMode = -1;
+        private const string cursorsKey = @"HKEY_CURRENT_USER\Control Panel\Cursors\";
+        private const string cursorsPath = @"%SystemRoot%\cursors\";
+        private const string personalizeKey = @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize\";
+        private const string accessibilityKey = @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Accessibility\";
+
+        private int lightMode = -1;
 		private int brightness = -1;
         private readonly GeoCoordinate location;
         private readonly Mutex mutex = new Mutex();
@@ -31,29 +38,74 @@ namespace Eyes_Guardian
             }
         }
 
-		private int LightMode
+        private void SetWindowsAeroCursor()
+        {
+            Registry.SetValue(cursorsKey, "", "Windows Aero");
+            Registry.SetValue(cursorsKey, "AppStarting", cursorsPath + "aero_working.ani");
+            Registry.SetValue(cursorsKey, "Arrow", cursorsPath + "aero_arrow.cur");
+            Registry.SetValue(cursorsKey, "Crosshair", "");
+            Registry.SetValue(cursorsKey, "Hand", cursorsPath + "aero_link.cur");
+            Registry.SetValue(cursorsKey, "Help", cursorsPath + "aero_helpsel.cur");
+            Registry.SetValue(cursorsKey, "IBeam", "");
+            Registry.SetValue(cursorsKey, "No", cursorsPath + "aero_unavail.cur");
+            Registry.SetValue(cursorsKey, "NWPen", cursorsPath + "aero_pen.cur");
+            Registry.SetValue(cursorsKey, "SizeAll", cursorsPath + "aero_move.cur");
+            Registry.SetValue(cursorsKey, "SizeNESW", cursorsPath + "aero_nesw.cur");
+            Registry.SetValue(cursorsKey, "SizeNS", cursorsPath + "aero_ns.cur");
+            Registry.SetValue(cursorsKey, "SizeNWSE", cursorsPath + "aero_nwse.cur");
+            Registry.SetValue(cursorsKey, "SizeWE", cursorsPath + "aero_ew.cur");
+            Registry.SetValue(cursorsKey, "UpArrow", cursorsPath + "aero_up.cur");
+            Registry.SetValue(cursorsKey, "AppStarting", cursorsPath + "aero_busy.ani");
+            Registry.SetValue(accessibilityKey, "CursorType", 0);
+            SystemParametersInfo(SPI_SETCURSORS, 0, 0, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        }
+
+        private void SetWindowsBlackCursor()
+        {
+            Registry.SetValue(cursorsKey, "", "Windows Black");
+            Registry.SetValue(cursorsKey, "AppStarting", cursorsPath + "wait_r.cur");
+            Registry.SetValue(cursorsKey, "Arrow", cursorsPath + "arrow_r.cur");
+            Registry.SetValue(cursorsKey, "Crosshair", cursorsPath + "cross_r.cur");
+            Registry.SetValue(cursorsKey, "Hand", "");
+            Registry.SetValue(cursorsKey, "Help", cursorsPath + "help_r.cur");
+            Registry.SetValue(cursorsKey, "IBeam", cursorsPath + "beam_r.cur");
+            Registry.SetValue(cursorsKey, "No", cursorsPath + "no_r.cur");
+            Registry.SetValue(cursorsKey, "NWPen", cursorsPath + "pen_r.cur");
+            Registry.SetValue(cursorsKey, "SizeAll", cursorsPath + "move_r.cur");
+            Registry.SetValue(cursorsKey, "SizeNESW", cursorsPath + "size1_r.cur");
+            Registry.SetValue(cursorsKey, "SizeNS", cursorsPath + "size4_r.cur");
+            Registry.SetValue(cursorsKey, "SizeNWSE", cursorsPath + "size2_r.cur");
+            Registry.SetValue(cursorsKey, "SizeWE", cursorsPath + "size3_r.cur");
+            Registry.SetValue(cursorsKey, "UpArrow", cursorsPath + "up_r.cur");
+            Registry.SetValue(cursorsKey, "AppStarting", cursorsPath + "busy_r.cur");
+            Registry.SetValue(accessibilityKey, "CursorType", 1);
+            SystemParametersInfo(SPI_SETCURSORS, 0, 0, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        }
+
+        private void SetLightMode(int value)
 		{
-			get => lightMode;
-			set
+			if (value != lightMode)
 			{
-				if (value != lightMode)
-				{
-					lightMode = value;
-					RunCommand("reg add HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize /v AppsUseLightTheme /t REG_DWORD /d " + value + " /f");
-				}
-			}
+				lightMode = value;
+                Registry.SetValue(personalizeKey, "AppsUseLightTheme", value);
+                Registry.SetValue(personalizeKey, "SystemUsesLightTheme", value);
+                if (value == 1)
+                {
+                    SetWindowsAeroCursor();
+                }
+                else
+                {
+                    SetWindowsBlackCursor();
+                }
+            }
 		}
 
-        private int Brightness
+        private void SetBrightness(int value)
 		{
-			get => brightness;
-			set
+			if (value != brightness)
 			{
-				if (value != brightness)
-				{
-					brightness = value;
-					RunCommand("PowerShell -Command (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, " + value + ")");
-				}
+				brightness = value;
+				RunCommand("PowerShell -Command (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, " + value + ")");
 			}
 		}
 
@@ -88,24 +140,31 @@ namespace Eyes_Guardian
 
 			if (celestial.IsSunUp)
 			{
-				LightMode = 1;
+                SetLightMode(1);
 			}
 			else
 			{
-				LightMode = 0;
+                SetLightMode(0);
 			}
 
 			double factor = (Sin(celestial.SunAltitude * PI / 180.0) + 0.3) * 1.0 / 1.3;
 			if (factor > 0.0)
 			{
-				Brightness = (int)(Sqrt(factor) * 100.0);
+                SetBrightness((int)(Sqrt(factor) * 100.0));
 			}
 			else
 			{
-				Brightness = 0;
+				SetBrightness(0);
 			}
 
             mutex.ReleaseMutex();
 		}
-	}
+
+        const int SPI_SETCURSORS = 0x0057;
+        const int SPIF_UPDATEINIFILE = 0x01;
+        const int SPIF_SENDCHANGE = 0x02;
+
+        [DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
+        public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, uint pvParam, uint fWinIni);
+    }
 }
